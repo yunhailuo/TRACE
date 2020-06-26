@@ -27,3 +27,16 @@
 *.exe
 *.out
 *.app
+
+# Genomic files
+*.bam
+*.bam.bai
+*.fa
+*.fa.fai
+*.tsv
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Executable
+TRACE

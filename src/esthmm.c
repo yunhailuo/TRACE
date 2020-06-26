@@ -200,7 +200,7 @@ int main (int argc, char **argv)
   }
   /* Check the required 3 input files were provided */
   if (argc - optind < 2){
-    fprintf(stderr, "Error: required files not provided \n", seqfile);
+    fprintf(stderr, "Error: required files not provided \n");
     errflg++;
   }
   if (errflg) {

@@ -93,8 +93,8 @@ void BaumWelch(HMM *phmm, int T, gsl_matrix * obs_matrix, int *pniter, int P,
   if (phmm->model == 2) EmissionMatrix_mv_reduce(phmm, obs_matrix, P, peakPos, emission_matrix, T);
   /* forward-backward algorithm, calculate alpha, beta and gamma*/
   double *xi_sum = dvector(T);
-  Forward_P(phmm, T, alpha, logprobf, P, peakPos, emission_matrix);
   Backward_P(phmm, T, beta, P, peakPos, emission_matrix);
+  cuda_host_Forward_P(phmm, T, alpha, logprobf, P, peakPos, emission_matrix);
   ComputeGamma_P(phmm, T, alpha, beta, gamma);
   ComputeXi_sum_P(phmm, alpha, beta, xi_sum, emission_matrix, T);
   logprobprev = 0.0;
@@ -219,8 +219,13 @@ void BaumWelch(HMM *phmm, int T, gsl_matrix * obs_matrix, int *pniter, int P,
   if (phmm->model == 1) EmissionMatrix_mv(phmm, obs_matrix, P, peakPos, emission_matrix, T);
   if (phmm->model == 2) EmissionMatrix_mv_reduce(phmm, obs_matrix, P, peakPos, emission_matrix, T);
   /* calculate new alpha, beta, gamma and xi for next iteration of forward-backward algorithm*/
-  Forward_P(phmm, T, alpha, logprobf, P, peakPos, emission_matrix);
   Backward_P(phmm, T, beta, P, peakPos, emission_matrix);
+  if (l == 0) {
+    Forward_P(phmm, T, alpha, logprobf, P, peakPos, emission_matrix);
+  }
+  else {
+    cuda_host_Forward_P(phmm, T, alpha, logprobf, P, peakPos, emission_matrix);
+  }
   ComputeGamma_P(phmm, T, alpha, beta, gamma);
   ComputeXi_sum_P(phmm, alpha, beta, xi_sum, emission_matrix, T);
     
