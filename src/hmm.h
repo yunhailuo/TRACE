@@ -64,6 +64,9 @@ void Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos,
 /*cu_fwd_bwd.cu*/
 void cuda_host_Forward_P(HMM * phmm, int T, double ** alpha, double * pprob,
                          int P, int * peakPos, gsl_matrix * emission_matrix);
+void cuda_host_Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos, 
+                          gsl_matrix * emission_matrix);
+
 /* emutils.c */
 void CalMotifScore_P(HMM *phmm, gsl_matrix * S, int *O1, int P, int *peakPos);
 void EmissionMatrix(HMM* phmm, gsl_matrix * obs_matrix, int P, int *peakPos, 
