@@ -1,21 +1,25 @@
 /*
- *  File: cu_fwd_bwd.cu
+ *  File: cu_hmm.cu
  *
- *  forward-backward algorithm
+ *  forward-backward algorithm, Baum-Welch algorithm
  *
- *  Modified from fwd_bwd.c
+ *  Modified from fwd_bwd.c, BaumWelch.c
  *
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <time.h>
 #include <math.h>
+#include "cublas_v2.h"
 extern "C" {
   #include "nrutil.h"
   #include "hmm.h"
 }
 #include "logmath.h"
 #include <omp.h>
+
+#define IDX2C(i,j,ld) (((j)*(ld))+(i))
 
 __device__ double d_logadd(const double p, const double q) {
   return (p > q) ? p + log1p(exp(q - p)) : q + log1p(exp(p - q));
@@ -376,4 +380,92 @@ void cuda_host_Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos,
   }
 }
   free(h_beta);
+}
+
+__global__ void cuda_dev_ReduceGamma_P(double *gamma, int N, double *denominator)
+{
+    int t = blockIdx.x;
+    denominator[t] = -INFINITY;
+    for (int i = 0; i < N; i++) {
+        denominator[t] = d_logCheckAdd(denominator[t], gamma[t * N + i]);
+    }
+}
+
+__global__ void cuda_dev_ComputeGamma_P(double *gamma, double * denominator)
+{
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    // ERROR: -inf gamma t: blockIdx
+    assert (denominator[blockIdx.x] != -INFINITY);
+    // ERROR: na gamma t: blockIdx
+    assert (denominator[blockIdx.x] == denominator[blockIdx.x]);
+    gamma[i] -= denominator[blockIdx.x];
+    // ERROR: gamma NA t: blockIdx
+    assert (gamma[i] == gamma[i]);
+}
+
+int cuda_host_ComputeGamma_P (HMM *phmm, int T,
+                               double **alpha, double **beta, double **gamma)
+{
+    cublasHandle_t handle;
+    double *h_alpha, *h_beta, *h_gamma;
+    double *d_alpha, *d_beta, *d_gamma, *d_denominator;
+
+    h_alpha = (double *)malloc (phmm->N * T * sizeof (*h_alpha));
+    h_beta = (double *)malloc (phmm->N * T * sizeof (*h_beta));
+#pragma omp parallel num_threads(THREAD_NUM)
+{
+#pragma omp for collapse(2)
+    for (int j = 0; j < T; j++) {
+        for (int i = 0; i < phmm->N; i++) {
+            h_alpha[IDX2C(i, j, phmm->N)] = alpha[i][j];
+            h_beta[IDX2C(i, j, phmm->N)] = beta[i][j];
+        }
+    }
+}
+
+    cudaMalloc ((void**)&d_alpha, phmm->N * T * sizeof(*h_alpha));
+    cublasSetMatrix (phmm->N, T, sizeof(*d_alpha),
+                     h_alpha, phmm->N, d_alpha, phmm->N);
+    free(h_alpha);
+    cudaMalloc ((void**)&d_beta, phmm->N * T * sizeof(*h_beta));
+    cublasSetMatrix (phmm->N, T, sizeof(*d_beta),
+                     h_beta, phmm->N, d_beta, phmm->N);
+    free(h_beta);
+    cudaMalloc ((void**)&d_gamma, phmm->N * T * sizeof(*d_gamma));
+    cublasCreate(&handle);
+
+    double cublasAlpha = 1.0;
+    double cublasBeta = 1.0;
+    cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, phmm->N, T,
+                &cublasAlpha, d_alpha, phmm->N,
+                &cublasBeta, d_beta, phmm->N,
+                d_gamma, phmm->N);
+    cudaFree (d_alpha);
+    cudaFree (d_beta);
+
+    cudaMalloc ((void**)&d_denominator, T * sizeof(*d_denominator));
+    cuda_dev_ReduceGamma_P<<<T, 1>>>(d_gamma, phmm->N, d_denominator);
+    cudaDeviceSynchronize();
+
+    cuda_dev_ComputeGamma_P<<<T, phmm->N>>>(d_gamma, d_denominator);
+
+    h_gamma = (double *)malloc (phmm->N * T * sizeof (*h_gamma));
+    cudaMemcpy(h_gamma, d_gamma, phmm->N * T * sizeof(*d_gamma),
+               cudaMemcpyDeviceToHost);
+    cudaFree(d_denominator);
+    cudaFree(d_gamma);
+    cublasDestroy(handle);
+
+#pragma omp parallel num_threads(THREAD_NUM)
+{
+#pragma omp for collapse(2)
+    for (int j = 0; j < T; j++) {
+        for (int i = 0; i < phmm->N; i++) {
+            gamma[i][j] = h_gamma[IDX2C(i, j, phmm->N)];
+        }
+    }
+}
+
+    free(h_gamma);
+    return EXIT_SUCCESS;
 }

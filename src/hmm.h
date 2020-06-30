@@ -54,18 +54,20 @@ void ComputeXi_sum_P(HMM* phmm, double **alpha, double **beta, double *xi_sum,
 void ComputeGamma_P(HMM *phmm, int T, double **alpha, double **beta, 
                     double **gamma);
 
+/* cu_hmm.cu */
+void cuda_host_Forward_P(HMM * phmm, int T, double ** alpha, double * pprob,
+                         int P, int * peakPos, gsl_matrix * emission_matrix);
+void cuda_host_Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos, 
+                          gsl_matrix * emission_matrix);
+int cuda_host_ComputeGamma_P (HMM *phmm, int T,
+                               double **alpha, double **beta, double **gamma);
+
 /*fwd_bwd.c*/
 void Forward_P(HMM *phmm, int T, double **alpha, double *pprob, int P, 
                int *peakPos, gsl_matrix * emission_matrix);
 void Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos, 
                 gsl_matrix * emission_matrix);
                 
-
-/*cu_fwd_bwd.cu*/
-void cuda_host_Forward_P(HMM * phmm, int T, double ** alpha, double * pprob,
-                         int P, int * peakPos, gsl_matrix * emission_matrix);
-void cuda_host_Backward_P(HMM *phmm, int T, double **beta, int P, int *peakPos, 
-                          gsl_matrix * emission_matrix);
 
 /* emutils.c */
 void CalMotifScore_P(HMM *phmm, gsl_matrix * S, int *O1, int P, int *peakPos);
